@@ -143,9 +143,10 @@ func (b *AMQPBroker) Consume() <-chan *Task {
 
 			switch d.ContentType {
 			case "application/json":
-				fallthrough
-			default:
 				json.Unmarshal(d.Body, &task)
+			default:
+				log.Printf("Unsupported content-type [%s]", d.ContentType)
+				continue
 			}
 
 			task.responder = &AMQPResponder{d}

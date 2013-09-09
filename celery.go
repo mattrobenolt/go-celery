@@ -88,7 +88,10 @@ func Init() {
 		sem.Wait()
 		go func(task *Task) {
 			if worker, ok := registry[task.Task]; ok {
-				_, err := worker.Exec(task)
+				log.Printf("Got task from broker: %s", task)
+				start := time.Now()
+				result, err := worker.Exec(task)
+				end := time.Now()
 				if err != nil {
 					switch err {
 					case RetryError:
@@ -97,6 +100,7 @@ func Init() {
 						task.Reject()
 					}
 				} else {
+					log.Printf("Task %s succeeded in %s: %s", task, end.Sub(start), result)
 					task.Ack()
 				}
 			} else {
