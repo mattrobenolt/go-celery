@@ -30,7 +30,8 @@ type Task struct {
 	responder Responder
 }
 
-func (t *Task) Ack() {
+func (t *Task) Ack(result interface{}) {
+	t.responder.Reply(t.Id, result)
 	t.responder.Ack()
 }
 
@@ -101,7 +102,7 @@ func Init() {
 					}
 				} else {
 					log.Printf("Task %s succeeded in %s: %s", task, end.Sub(start), result)
-					task.Ack()
+					task.Ack(result)
 				}
 			} else {
 				task.Reject()

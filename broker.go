@@ -16,6 +16,7 @@ type Broker interface {
 }
 
 type Responder interface {
+	Reply(string, interface{})
 	Ack()
 	Requeue()
 	Reject()
@@ -32,6 +33,15 @@ func (r *AMQPResponder) Requeue() {
 }
 func (r *AMQPResponder) Reject() {
 	r.d.Reject(false)
+}
+func (r *AMQPResponder) Reply(id string, data interface{}) {
+	result := &Result{
+		Status: StatusSuccess,
+		Result: data,
+		Id: id,
+	}
+	payload, err := json.Marshal(result)
+	fmt.Println(string(payload), err)
 }
 
 type AMQPBroker struct {
@@ -146,6 +156,7 @@ func (b *AMQPBroker) Consume() <-chan *Task {
 				json.Unmarshal(d.Body, &task)
 			default:
 				log.Printf("Unsupported content-type [%s]", d.ContentType)
+				d.Reject(false)
 				continue
 			}
 
