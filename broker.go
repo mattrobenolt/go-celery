@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"time"
 	"encoding/json"
+	"fmt"
 )
 
 type Broker interface {
@@ -68,9 +69,55 @@ func (b *AMQPBroker) Connect() error {
 			continue
 		}
 
+		exchange := "celery"
+
+		log.Printf("got Channel, declaring Exchange (%q)", exchange)
+		if err = b.channel.ExchangeDeclare(
+			exchange,     // name of the exchange
+			"direct",     // type
+			true,         // durable
+			false,        // delete when complete
+			false,        // internal
+			false,        // noWait
+			nil,          // arguments
+		); err != nil {
+			log.Print(fmt.Errorf("Exchange Declare: %s", err))
+			continue
+		}
+
+		log.Printf("declared Exchange, declaring Queue %q", b.queue)
+		queue, err := b.channel.QueueDeclare(
+			b.queue, // name of the queue
+			true,      // durable
+			false,     // delete when usused
+			false,     // exclusive
+			false,     // noWait
+			nil,       // arguments
+		)
+		if err != nil {
+			log.Print(fmt.Errorf("Queue Declare: %s", err))
+			continue
+		}
+
+		key := "celery"
+
+		log.Printf("declared Queue (%q %d messages, %d consumers), binding to Exchange (key %q)",
+			queue.Name, queue.Messages, queue.Consumers, key)
+
+		if err = b.channel.QueueBind(
+			queue.Name, // name of the queue
+			key,        // bindingKey
+			exchange,   // sourceExchange
+			false,      // noWait
+			nil,        // arguments
+		); err != nil {
+			log.Print(fmt.Errorf("Queue Bind: %s", err))
+			continue
+		}
+
 		log.Printf("Joining queue")
 		b.deliveries, err = b.channel.Consume(
-			b.queue,  // queue name
+			queue.Name,  // queue name
 			"",       // consumerTag
 			false,    // auto ack
 			false,     // exclusive

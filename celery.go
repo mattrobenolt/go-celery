@@ -10,11 +10,12 @@ import (
 	"runtime"
 	"errors"
 	"github.com/mattrobenolt/semaphore"
+	"fmt"
 )
 
 var (
 	broker = flag.String("broker", "amqp://guest:guest@localhost:5672//", "Broker")
-	queue  = flag.String("Q", "default", "queue")
+	queue  = flag.String("Q", "celery", "queue")
 	concurrency = flag.Int("c", runtime.NumCPU(), "concurrency")
 )
 
@@ -44,24 +45,31 @@ func (t *Task) Reject() {
 	t.responder.Reject()
 }
 
+func (t *Task) String() string {
+	return fmt.Sprintf("%s[%s]", t.Task, t.Id)
+}
+
 type Worker interface {
-	Exec(*Task) error
+	Exec(*Task) (interface{}, error)
 }
 
 var registry = make(map[string]Worker)
 
 func RegisterTask(name string, worker Worker) {
 	registry[name] = worker
-	log.Printf("Registered %s", name)
 }
 
 var (
-	RetryError = errors.New("Retry task again")
+	RetryError  = errors.New("Retry task again")
 	RejectError = errors.New("Reject task")
 )
 
 func Init() {
 	flag.Parse()
+	fmt.Println("[Tasks]")
+	for key, _ := range registry {
+		fmt.Printf("  %s\n", key)
+	}
 	broker := NewBroker(*broker, *queue)
 	err := broker.Connect()
 	if err != nil {
@@ -80,7 +88,7 @@ func Init() {
 		sem.Wait()
 		go func(task *Task) {
 			if worker, ok := registry[task.Task]; ok {
-				err := worker.Exec(task)
+				_, err := worker.Exec(task)
 				if err != nil {
 					switch err {
 					case RetryError:
