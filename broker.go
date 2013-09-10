@@ -8,10 +8,18 @@ import (
 	"time"
 	"encoding/json"
 	"fmt"
+	"math"
+	"errors"
+)
+
+var (
+	TwoSeconds = 2 * time.Second
+	MaxiumRetriesError = errors.New("Maximum retries exceeded")
 )
 
 type Broker interface {
 	Connect() error
+	ConnectMaxRetries(uint64) error
 	Consume() <-chan *Task
 }
 
@@ -52,17 +60,24 @@ type AMQPBroker struct {
 }
 
 func (b *AMQPBroker) Connect() error {
-	var first = true
+	return b.ConnectMaxRetries(math.MaxUint64-1)
+}
+
+func (b *AMQPBroker) ConnectMaxRetries(retries uint64) error {
 	var err error
 
 	urls := strings.Split(b.url, ";")
 	i := rand.Intn(len(urls))
+	backoff := 0 * time.Second
 
-	for {
-		if !first {
-			time.Sleep(time.Second)
+	for retries++; retries > 0; retries-- {
+		if backoff != 0 {
+			log.Printf("Retrying in %s...", backoff)
+			time.Sleep(backoff)
+			backoff += TwoSeconds
+		} else {
+			backoff = TwoSeconds
 		}
-		first = false
 
 		url := urls[i]
 		log.Printf("dialing %s", url)
@@ -143,6 +158,8 @@ func (b *AMQPBroker) Connect() error {
 
 		return nil
 	}
+
+	return MaxiumRetriesError
 }
 
 func (b *AMQPBroker) Consume() <-chan *Task {

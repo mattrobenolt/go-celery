@@ -67,14 +67,14 @@ var (
 
 func Init() {
 	flag.Parse()
-	fmt.Println("[Tasks]")
-	for key, _ := range registry {
-		fmt.Printf("  %s\n", key)
-	}
 	broker := NewBroker(*broker, *queue)
 	err := broker.Connect()
 	if err != nil {
 		panic(err)
+	}
+	fmt.Println("[Tasks]")
+	for key, _ := range registry {
+		fmt.Printf("  %s\n", key)
 	}
 	tasks := broker.Consume()
 	sem := semaphore.New(*concurrency)
