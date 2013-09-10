@@ -1,7 +1,6 @@
 package celery
 
 import (
-	"log"
 	"strings"
 	"github.com/streadway/amqp"
 	"math/rand"
@@ -72,7 +71,7 @@ func (b *AMQPBroker) ConnectMaxRetries(retries uint64) error {
 
 	for retries++; retries > 0; retries-- {
 		if backoff != 0 {
-			log.Printf("Retrying in %s...", backoff)
+			logger.Error("Retrying in %s...", backoff)
 			time.Sleep(backoff)
 			backoff += TwoSeconds
 		} else {
@@ -80,23 +79,23 @@ func (b *AMQPBroker) ConnectMaxRetries(retries uint64) error {
 		}
 
 		url := urls[i]
-		log.Printf("dialing %s", url)
+		logger.Debug("dialing %s", url)
 		b.conn, err = amqp.Dial(url)
 		if err != nil {
-			log.Printf("Dial: %s", err)
+			logger.Error("Dial: %s", err)
 			continue
 		}
 
-		log.Printf("Joining channel")
+		logger.Debug("Joining channel")
 		b.channel, err = b.conn.Channel()
 		if err != nil {
-			log.Printf("Channel: %s", err)
+			logger.Error("Channel: %s", err)
 			continue
 		}
 
 		exchange := "celery"
 
-		log.Printf("got Channel, declaring Exchange (%q)", exchange)
+		logger.Debug("got Channel, declaring Exchange (%q)", exchange)
 		if err = b.channel.ExchangeDeclare(
 			exchange,     // name of the exchange
 			"direct",     // type
@@ -106,11 +105,11 @@ func (b *AMQPBroker) ConnectMaxRetries(retries uint64) error {
 			false,        // noWait
 			nil,          // arguments
 		); err != nil {
-			log.Print(fmt.Errorf("Exchange Declare: %s", err))
+			logger.Error("Exchange Declare: %s", err)
 			continue
 		}
 
-		log.Printf("declared Exchange, declaring Queue %q", b.queue)
+		logger.Debug("declared Exchange, declaring Queue %q", b.queue)
 		queue, err := b.channel.QueueDeclare(
 			b.queue, // name of the queue
 			true,      // durable
@@ -120,41 +119,25 @@ func (b *AMQPBroker) ConnectMaxRetries(retries uint64) error {
 			nil,       // arguments
 		)
 		if err != nil {
-			log.Print(fmt.Errorf("Queue Declare: %s", err))
+			logger.Error("Queue Declare: %s", err)
 			continue
 		}
 
 		key := "celery"
 
-		log.Printf("declared Queue (%q %d messages, %d consumers), binding to Exchange (key %q)",
+		logger.Debug("declared Queue (%q %d messages, %d consumers), binding to Exchange (key %q)",
 			queue.Name, queue.Messages, queue.Consumers, key)
 
 		if err = b.channel.QueueBind(
-			queue.Name, // name of the queue
+			b.queue, // name of the queue
 			key,        // bindingKey
 			exchange,   // sourceExchange
 			false,      // noWait
 			nil,        // arguments
 		); err != nil {
-			log.Print(fmt.Errorf("Queue Bind: %s", err))
+			logger.Error("Queue Bind: %s", err)
 			continue
 		}
-
-		log.Printf("Joining queue")
-		b.deliveries, err = b.channel.Consume(
-			queue.Name,  // queue name
-			"",       // consumerTag
-			false,    // auto ack
-			false,     // exclusive
-			false,    // noLocal
-			false,    // noWait
-			nil,      // arguments
-		)
-		if err != nil {
-			log.Printf("Consume %s", err)
-			continue
-		}
-		log.Printf("Ready")
 
 		return nil
 	}
@@ -163,6 +146,22 @@ func (b *AMQPBroker) ConnectMaxRetries(retries uint64) error {
 }
 
 func (b *AMQPBroker) Consume() <-chan *Task {
+	logger.Debug("Joining queue")
+	var err error
+	b.deliveries, err = b.channel.Consume(
+		b.queue,  // queue name
+		"",       // consumerTag
+		false,    // auto ack
+		false,     // exclusive
+		false,    // noLocal
+		false,    // noWait
+		nil,      // arguments
+	)
+	if err != nil {
+		logger.Error("Consume %s", err)
+		return nil
+	}
+
 	tasks := make(chan *Task)
 	go func() {
 		for d := range b.deliveries {
@@ -172,7 +171,7 @@ func (b *AMQPBroker) Consume() <-chan *Task {
 			case "application/json":
 				json.Unmarshal(d.Body, &task)
 			default:
-				log.Printf("Unsupported content-type [%s]", d.ContentType)
+				logger.Warn("Unsupported content-type [%s]", d.ContentType)
 				d.Reject(false)
 				continue
 			}

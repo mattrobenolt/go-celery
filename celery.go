@@ -1,7 +1,6 @@
 package celery
 
 import (
-	"log"
 	"flag"
 	"time"
 	"os"
@@ -72,24 +71,28 @@ func Init() {
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println("")
 	fmt.Println("[Tasks]")
 	for key, _ := range registry {
 		fmt.Printf("  %s\n", key)
 	}
+	fmt.Println("")
 	tasks := broker.Consume()
 	sem := semaphore.New(*concurrency)
 	go func() {
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGHUP)
 		for sig := range c {
-			log.Println(sig)
+			logger.Info(sig)
 		}
 	}()
+	hostname, _ := os.Hostname()
+	logger.Warn("celery@%s ready.", hostname)
 	for task := range tasks {
 		sem.Wait()
 		go func(task *Task) {
 			if worker, ok := registry[task.Task]; ok {
-				log.Printf("Got task from broker: %s", task)
+				logger.Info("Got task from broker: %s", task)
 				start := time.Now()
 				result, err := worker.Exec(task)
 				end := time.Now()
@@ -101,12 +104,12 @@ func Init() {
 						task.Reject()
 					}
 				} else {
-					log.Printf("Task %s succeeded in %s: %s", task, end.Sub(start), result)
+					logger.Info("Task %s succeeded in %s: %s", task, end.Sub(start), result)
 					task.Ack(result)
 				}
 			} else {
 				task.Reject()
-				log.Printf("Unknown task %s", task.Task)
+				logger.Warn("Unknown task %s", task.Task)
 			}
 			sem.Signal()
 		}(task)
