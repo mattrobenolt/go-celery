@@ -6,7 +6,6 @@ import (
 	"math/rand"
 	"time"
 	"encoding/json"
-	"fmt"
 	"math"
 	"errors"
 )
@@ -31,6 +30,7 @@ type Responder interface {
 
 type AMQPResponder struct {
 	d amqp.Delivery
+	b *AMQPBroker
 }
 func (r *AMQPResponder) Ack() {
 	r.d.Ack(false)
@@ -47,8 +47,36 @@ func (r *AMQPResponder) Reply(id string, data interface{}) {
 		Result: data,
 		Id: id,
 	}
+
 	payload, err := json.Marshal(result)
-	fmt.Println(string(payload), err)
+	logger.Debug("declared Exchange, declaring Queue %q", id)
+	_, err = r.b.channel.QueueDeclare(
+		id, // name of the queue
+		true,      // durable
+		false,     // delete when usused
+		false,     // exclusive
+		false,     // noWait
+		nil,       // arguments
+	)
+	if err != nil {
+		logger.Error("Queue Declare: %s", err)
+		return
+	}
+
+	msg := amqp.Publishing{
+		DeliveryMode: amqp.Persistent,
+		Timestamp:    time.Now(),
+		ContentType:  "application/json",
+		Body:         payload,
+	}
+
+	r.b.channel.Publish(
+		"",  // exchange
+		strings.Replace(id, "-", "", -1),  // key
+		false, // mandatory
+		false,  // immediate
+		msg,  // body
+	)
 }
 
 type AMQPBroker struct {
@@ -62,9 +90,7 @@ func (b *AMQPBroker) Connect() error {
 	return b.ConnectMaxRetries(math.MaxUint64-1)
 }
 
-func (b *AMQPBroker) ConnectMaxRetries(retries uint64) error {
-	var err error
-
+func (b *AMQPBroker) ConnectMaxRetries(retries uint64) (err error) {
 	urls := strings.Split(b.url, ";")
 	i := rand.Intn(len(urls))
 	backoff := 0 * time.Second
@@ -176,7 +202,7 @@ func (b *AMQPBroker) Consume() <-chan *Task {
 				continue
 			}
 
-			task.responder = &AMQPResponder{d}
+			task.responder = &AMQPResponder{d, b}
 			tasks <- task
 		}
 	}()

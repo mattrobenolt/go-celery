@@ -10,6 +10,7 @@ import (
 	"errors"
 	"github.com/mattrobenolt/semaphore"
 	"fmt"
+	"encoding/json"
 )
 
 var (
@@ -104,7 +105,10 @@ func Init() {
 						task.Reject()
 					}
 				} else {
-					logger.Info("Task %s succeeded in %s: %s", task, end.Sub(start), result)
+					logger.Info(func()string {
+						res, _ := json.Marshal(result)
+						return fmt.Sprintf("Task %s succeeded in %s: %s", task, end.Sub(start), res)
+					})
 					task.Ack(result)
 				}
 			} else {
