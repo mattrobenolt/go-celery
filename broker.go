@@ -48,15 +48,17 @@ func (r *AMQPResponder) Reply(id string, data interface{}) {
 		Id: id,
 	}
 
+	id = strings.Replace(id, "-", "", -1)
+
 	payload, err := json.Marshal(result)
 	logger.Debug("declared Exchange, declaring Queue %q", id)
 	_, err = r.b.channel.QueueDeclare(
 		id, // name of the queue
-		true,      // durable
-		false,     // delete when usused
+		false,      // durable
+		true,     // delete when usused
 		false,     // exclusive
 		false,     // noWait
-		nil,       // arguments
+		amqp.Table{"x-expires": int32(86400000)},       // arguments
 	)
 	if err != nil {
 		logger.Error("Queue Declare: %s", err)
@@ -72,7 +74,7 @@ func (r *AMQPResponder) Reply(id string, data interface{}) {
 
 	r.b.channel.Publish(
 		"",  // exchange
-		strings.Replace(id, "-", "", -1),  // key
+		id,  // key
 		false, // mandatory
 		false,  // immediate
 		msg,  // body
