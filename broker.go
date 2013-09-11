@@ -18,7 +18,7 @@ var (
 type Broker interface {
 	Connect() error
 	ConnectMaxRetries(uint64) error
-	Consume() <-chan *Task
+	Consume(int) <-chan *Task
 }
 
 type Responder interface {
@@ -173,9 +173,9 @@ func (b *AMQPBroker) ConnectMaxRetries(retries uint64) (err error) {
 	return MaxiumRetriesError
 }
 
-func (b *AMQPBroker) Consume() <-chan *Task {
-	logger.Debug("Joining queue")
+func (b *AMQPBroker) Consume(rate int) <-chan *Task {
 	var err error
+	b.channel.Qos(rate, 0, false)
 	b.deliveries, err = b.channel.Consume(
 		b.queue,  // queue name
 		"",       // consumerTag
@@ -193,19 +193,21 @@ func (b *AMQPBroker) Consume() <-chan *Task {
 	tasks := make(chan *Task)
 	go func() {
 		for d := range b.deliveries {
-			task := &Task{}
+			go func(d amqp.Delivery) {
+				task := &Task{}
 
-			switch d.ContentType {
-			case "application/json":
-				json.Unmarshal(d.Body, &task)
-			default:
-				logger.Warn("Unsupported content-type [%s]", d.ContentType)
-				d.Reject(false)
-				continue
-			}
+				switch d.ContentType {
+				case "application/json":
+					json.Unmarshal(d.Body, &task)
+				default:
+					logger.Warn("Unsupported content-type [%s]", d.ContentType)
+					d.Reject(false)
+					return
+				}
 
-			task.responder = &AMQPResponder{d, b}
-			tasks <- task
+				task.responder = &AMQPResponder{d, b}
+				tasks <- task
+			}(d)
 		}
 	}()
 	return tasks

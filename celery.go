@@ -8,7 +8,6 @@ import (
 	"syscall"
 	"runtime"
 	"errors"
-	"github.com/mattrobenolt/semaphore"
 	"fmt"
 	"encoding/json"
 )
@@ -67,6 +66,7 @@ var (
 
 func Init() {
 	flag.Parse()
+	runtime.GOMAXPROCS(*concurrency)
 	broker := NewBroker(*broker, *queue)
 	err := broker.Connect()
 	if err != nil {
@@ -78,8 +78,7 @@ func Init() {
 		fmt.Printf("  %s\n", key)
 	}
 	fmt.Println("")
-	tasks := broker.Consume()
-	sem := semaphore.New(*concurrency)
+	tasks := broker.Consume(*concurrency)
 	go func() {
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGHUP)
@@ -90,7 +89,6 @@ func Init() {
 	hostname, _ := os.Hostname()
 	logger.Warn("celery@%s ready.", hostname)
 	for task := range tasks {
-		sem.Wait()
 		go func(task *Task) {
 			if worker, ok := registry[task.Task]; ok {
 				logger.Info("Got task from broker: %s", task)
@@ -115,7 +113,6 @@ func Init() {
 				task.Reject()
 				logger.Warn("Unknown task %s", task.Task)
 			}
-			sem.Signal()
 		}(task)
 	}
 }
