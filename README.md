@@ -1,7 +1,7 @@
 # [Celery](http://www.celeryproject.org/) consumer
 Consumes jobs that are published using [Celery](http://www.celeryproject.org/) in Go.
 
-***Note**: In very early development.*
+*__Note__: In very early development.*
 
 ## Installation
 
