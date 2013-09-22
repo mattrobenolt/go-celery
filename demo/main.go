@@ -1,6 +1,7 @@
 package main
 
 import "celery"
+import "time"
 
 type Adder struct {}
 func (a *Adder) Exec(task *celery.Task) (result interface{}, err error) {
@@ -9,6 +10,7 @@ func (a *Adder) Exec(task *celery.Task) (result interface{}, err error) {
         sum += arg.(float64)
     }
     result = sum
+    time.Sleep(5*time.Second)
     return
 }
 

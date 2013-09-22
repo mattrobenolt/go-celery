@@ -5,11 +5,11 @@ import (
 	"time"
 	"os"
 	"os/signal"
-	"syscall"
 	"runtime"
 	"errors"
 	"fmt"
 	"encoding/json"
+	"sync"
 )
 
 var (
@@ -17,37 +17,6 @@ var (
 	queue  = flag.String("Q", "celery", "queue")
 	concurrency = flag.Int("c", runtime.NumCPU(), "concurrency")
 )
-
-type Task struct {
-	Task string
-	Id string
-	Args []interface{}
-	Kwargs map[string]interface{}
-	Retries int
-	Eta string
-	Expires string
-	responder Responder
-}
-
-func (t *Task) Ack(result interface{}) {
-	t.responder.Reply(t.Id, result)
-	t.responder.Ack()
-}
-
-func (t *Task) Requeue() {
-	go func() {
-		time.Sleep(time.Second)
-		t.responder.Requeue()
-	}()
-}
-
-func (t *Task) Reject() {
-	t.responder.Reject()
-}
-
-func (t *Task) String() string {
-	return fmt.Sprintf("%s[%s]", t.Task, t.Id)
-}
 
 type Worker interface {
 	Exec(*Task) (interface{}, error)
@@ -64,32 +33,52 @@ var (
 	RejectError = errors.New("Reject task")
 )
 
+func shutdown(status int) {
+	fmt.Println("Bye.")
+	os.Exit(status)
+}
+
 func Init() {
 	flag.Parse()
 	runtime.GOMAXPROCS(*concurrency)
-	broker := NewBroker(*broker, *queue)
-	err := broker.Connect()
-	if err != nil {
-		panic(err)
-	}
+	broker := NewBroker(*broker)
 	fmt.Println("")
 	fmt.Println("[Tasks]")
 	for key, _ := range registry {
 		fmt.Printf("  %s\n", key)
 	}
 	fmt.Println("")
-	tasks := broker.Consume(*concurrency)
-	go func() {
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, syscall.SIGHUP)
-		for sig := range c {
-			logger.Info(sig)
-		}
-	}()
 	hostname, _ := os.Hostname()
 	logger.Warn("celery@%s ready.", hostname)
-	for task := range tasks {
+
+	queue := NewDurableQueue(*queue)
+	deliveries := broker.StartConsuming(queue, *concurrency)
+	var wg sync.WaitGroup
+	draining := false
+	go func() {
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, os.Interrupt)
+		for _ = range c {
+			// If interrupting for the second time,
+			// terminate un-gracefully
+			if draining {
+				fmt.Println("\nShutting down now.")
+				shutdown(1)
+			}
+			fmt.Println("\nAttempting to gracefully shut down...")
+			// Gracefully shut down
+			draining = true
+			go func() {
+				wg.Wait()
+				shutdown(0)
+			}()
+		}
+	}()
+	for !draining {
+		task := <- deliveries
+		wg.Add(1)
 		go func(task *Task) {
+			defer wg.Done()
 			if worker, ok := registry[task.Task]; ok {
 				logger.Info("Got task from broker: %s", task)
 				start := time.Now()
