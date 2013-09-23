@@ -34,7 +34,7 @@ var (
 )
 
 func shutdown(status int) {
-	fmt.Println("Bye.")
+	fmt.Println("\nceleryd: Warm shutdown")
 	os.Exit(status)
 }
 
@@ -62,10 +62,9 @@ func Init() {
 			// If interrupting for the second time,
 			// terminate un-gracefully
 			if draining {
-				fmt.Println("\nShutting down now.")
 				shutdown(1)
 			}
-			fmt.Println("\nAttempting to gracefully shut down...")
+			fmt.Println("\nceleryd: Hitting Ctrl+C again will terminate all running tasks!")
 			// Gracefully shut down
 			draining = true
 			go func() {
@@ -100,7 +99,7 @@ func Init() {
 				}
 			} else {
 				task.Reject()
-				logger.Warn("Unknown task %s", task.Task)
+				logger.Error("Received unregistered task of type '%s'.\nThe message has been ignored and discarded.\n", task.Task)
 			}
 		}(task)
 	}
