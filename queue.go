@@ -44,6 +44,7 @@ func NewQueue(name string, durable bool, ttl int) *Queue {
 		Name: name,
 		Durable: durable,
 		DeleteWhenUnused: !durable,
+		Ttl: ttl,
 	}
 }
 

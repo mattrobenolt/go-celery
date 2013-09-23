@@ -41,6 +41,10 @@ func (r *AMQPReceipt) Reply(id string, data interface{}) {
 
 	r.driver.Connect()
 	err = r.driver.DeclareQueue(NewExpiringQueue(id, 86400000))
+	if err != nil {
+		logger.Error("Error declaring queue [%s]", err)
+		return
+	}
 
 	publishing := &Publishing{
 		Key: id,
