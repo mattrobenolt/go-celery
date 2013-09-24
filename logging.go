@@ -12,7 +12,7 @@ var (
 
 var logger log.Logger
 
-func init() {
+func SetupLogging() {
 	flag.Parse()
 
 	level := log.ERROR

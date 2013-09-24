@@ -40,6 +40,8 @@ func shutdown(status int) {
 
 func Init() {
 	flag.Parse()
+	SetupLogging()
+
 	runtime.GOMAXPROCS(*concurrency)
 	broker := NewBroker(*broker)
 	fmt.Println("")
