@@ -34,3 +34,7 @@ func SetupLogging() {
 
 	logger = log.NewDefaultLogger(level)
 }
+
+func GetLogger() log.Logger {
+	return logger
+}
