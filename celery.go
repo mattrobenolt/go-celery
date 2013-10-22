@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"encoding/json"
 	"sync"
+	"syscall"
 )
 
 var (
@@ -59,7 +60,7 @@ func Init() {
 	draining := false
 	go func() {
 		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt)
+		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 		for _ = range c {
 			// If interrupting for the second time,
 			// terminate un-gracefully
