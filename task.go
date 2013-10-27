@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-const CELERY_FORMAT = "2006-01-02T15:04:05.999999999"
+const CELERY_FORMAT = `"2006-01-02T15:04:05.999999999"`
 
 type celeryTime struct {
 	time.Time
@@ -18,7 +18,7 @@ func (ct *celeryTime) UnmarshalJSON(data []byte) (err error) {
 	if bytes.Equal(data, null) {
 		return
 	}
-	t, err := time.Parse(`"`+CELERY_FORMAT+`"`, string(data))
+	t, err := time.Parse(CELERY_FORMAT, string(data))
 	if err == nil {
 		*ct = celeryTime{t}
 	}
@@ -29,7 +29,7 @@ func (ct *celeryTime) MarshalJSON() (data []byte, err error) {
 	if ct.IsZero() {
 		return null, nil
 	}
-	return []byte(ct.Format(`"`+CELERY_FORMAT+`"`)), nil
+	return []byte(ct.Format(CELERY_FORMAT)), nil
 }
 
 type Receipt interface {
